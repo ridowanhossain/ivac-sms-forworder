@@ -3,8 +3,10 @@ package com.ivac.otpforwarder
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.provider.Telephony
 import android.telephony.SmsMessage
+import android.telephony.SubscriptionManager
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +23,6 @@ class SmsReceiver : BroadcastReceiver() {
             Log.d("SmsReceiver", "Forwarding is disabled in settings.")
             return
         }
-
-        val firebaseUrl = prefs.getString("firebase_url", FirebaseClient.DEFAULT_FIREBASE_URL)
-            ?: FirebaseClient.DEFAULT_FIREBASE_URL
 
         val messages: Array<SmsMessage> = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
         if (messages.isEmpty()) return
@@ -49,7 +48,6 @@ class SmsReceiver : BroadcastReceiver() {
                  bodyText.contains("code", ignoreCase = true))
 
         if (!isIvacSender && !isIvacContent) {
-            // Other personal/bank SMS - DROP COMPLETELY!
             Log.d("SmsReceiver", "Non-IVAC SMS ignored from $sender")
             return
         }
@@ -61,29 +59,98 @@ class SmsReceiver : BroadcastReceiver() {
             return
         }
 
-        val userPhone = prefs.getString("user_phone", "") ?: ""
+        // Dual SIM detection
+        val detectedSlot = detectSimSlot(context, intent)
+        val sim1Phone = prefs.getString("sim1_phone", "")?.trim() ?: ""
+        val sim2Phone = prefs.getString("sim2_phone", "")?.trim() ?: ""
+        val legacyPhone = prefs.getString("user_phone", "")?.trim() ?: ""
+
+        val simLabel: String
+        val targetPhone: String
+
+        when (detectedSlot) {
+            0 -> {
+                simLabel = "SIM 1"
+                targetPhone = if (sim1Phone.isNotEmpty()) sim1Phone else legacyPhone
+            }
+            1 -> {
+                simLabel = "SIM 2"
+                targetPhone = if (sim2Phone.isNotEmpty()) sim2Phone else (if (sim1Phone.isNotEmpty()) sim1Phone else legacyPhone)
+            }
+            else -> {
+                if (sim1Phone.isNotEmpty() && sim2Phone.isEmpty()) {
+                    simLabel = "SIM 1"
+                    targetPhone = sim1Phone
+                } else if (sim2Phone.isNotEmpty() && sim1Phone.isEmpty()) {
+                    simLabel = "SIM 2"
+                    targetPhone = sim2Phone
+                } else if (sim1Phone.isNotEmpty()) {
+                    simLabel = "SIM (Auto)"
+                    targetPhone = sim1Phone
+                } else {
+                    simLabel = "SIM"
+                    targetPhone = legacyPhone
+                }
+            }
+        }
 
         // Notify local UI
-        broadcastLog(context, "IVAC OTP Detected: [$extractedOtp] (Phone: $userPhone)")
+        val phoneDisplay = if (targetPhone.isNotEmpty()) targetPhone else "No phone saved"
+        broadcastLog(context, "[$simLabel] IVAC OTP: [$extractedOtp] (Phone: $phoneDisplay)")
 
-        // Send ONLY Phone & OTP in JSON to Firebase
+        // Send to Firebase with fixed database URL
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val result = FirebaseClient.sendOtpToFirebase(
-                    baseUrl = firebaseUrl,
+                    baseUrl = FirebaseClient.FIXED_FIREBASE_URL,
                     otp = extractedOtp,
-                    phoneNumber = userPhone
+                    phoneNumber = targetPhone
                 )
                 if (result.isSuccess) {
-                    broadcastLog(context, "SUCCESS: OTP [$extractedOtp] synced to Firebase!")
+                    broadcastLog(context, "SUCCESS: [$simLabel] OTP [$extractedOtp] synced to Cloud!")
                 } else {
-                    broadcastLog(context, "ERROR: " + (result.exceptionOrNull()?.message ?: "Failed"))
+                    val err = result.exceptionOrNull()?.message ?: "Sync failed"
+                    broadcastLog(context, "ERROR: [$simLabel] $err")
                 }
             } finally {
                 pendingResult.finish()
             }
         }
+    }
+
+    private fun detectSimSlot(context: Context, intent: Intent): Int {
+        val bundle: Bundle = intent.extras ?: return -1
+
+        // 1. Direct slot keys common across various Android OEMs
+        val slotKeys = arrayOf("slot", "slot_id", "simSlot", "sim_slot", "slotIndex", "android.telephony.extra.SLOT_INDEX", "phone", "simId")
+        for (key in slotKeys) {
+            if (bundle.containsKey(key)) {
+                val slot = bundle.getInt(key, -1)
+                if (slot in 0..1) return slot
+            }
+        }
+
+        // 2. Subscription ID extras
+        val subKeys = arrayOf("subscription", "sub_id", "subscription_id", "android.telephony.extra.SUBSCRIPTION_INDEX")
+        for (key in subKeys) {
+            if (bundle.containsKey(key)) {
+                val subId = bundle.getInt(key, -1)
+                if (subId != -1) {
+                    try {
+                        val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+                        val info = sm?.getActiveSubscriptionInfo(subId)
+                        if (info != null && info.simSlotIndex in 0..1) {
+                            return info.simSlotIndex
+                        }
+                    } catch (e: Exception) {
+                        Log.w("SmsReceiver", "Could not query SubscriptionManager: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        return -1
     }
 
     private fun broadcastLog(context: Context, logMessage: String) {

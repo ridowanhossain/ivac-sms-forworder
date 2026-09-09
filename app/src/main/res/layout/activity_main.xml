@@ -24,7 +24,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Syncs incoming IVAC SMS directly to your Firebase Database"
+            android:text="Dual-SIM automatic SMS detector and cloud Firebase forwarder"
             android:textColor="#A5D6A7"
             android:textSize="13sp" />
 
@@ -32,28 +32,43 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="18dp"
             android:background="#13473A"
             android:orientation="horizontal"
             android:padding="14dp">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Automatic SMS Forwarding"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Automatic SMS Forwarding"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="24/7 background service for incoming OTPs"
+                    android:textColor="#A5D6A7"
+                    android:textSize="11sp" />
+            </LinearLayout>
 
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switchService"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
                 android:checked="true" />
         </LinearLayout>
 
-        <!-- Phone Number Card -->
+        <!-- Dual SIM Configuration Card -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -65,111 +80,145 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Your IVAC Phone Number"
+                android:text="SIM &amp; Phone Configuration"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Will be sent with OTP in JSON: { phone, otp }"
+                android:text="App identifies which SIM receives the OTP and attaches its number"
                 android:textColor="#A5D6A7"
                 android:textSize="11sp" />
 
+            <!-- SIM 1 Section -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="SIM 1 (Slot 1)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSim1Status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Detecting..."
+                    android:textColor="#69F0AE"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <EditText
-                android:id="@+id/etUserPhone"
+                android:id="@+id/etSim1Phone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:background="#0A2A22"
-                android:hint="01XXXXXXXXX"
+                android:hint="SIM 1 Phone (e.g. 017XXXXXXXX)"
                 android:inputType="phone"
                 android:padding="10dp"
                 android:textColor="#FFFFFF"
                 android:textColorHint="#689F38"
                 android:textSize="13sp" />
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="12dp"
+                android:background="#1E5C4C" />
+
+            <!-- SIM 2 Section -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="SIM 2 (Slot 2)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSim2Status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Detecting..."
+                    android:textColor="#69F0AE"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etSim2Phone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="#0A2A22"
+                android:hint="SIM 2 Phone (e.g. 019XXXXXXXX)"
+                android:inputType="phone"
+                android:padding="10dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#689F38"
+                android:textSize="13sp" />
+
+            <!-- Save Button -->
+            <Button
+                android:id="@+id/btnSave"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:backgroundTint="#FF6D20"
+                android:text="Save Phone Numbers"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Firebase URL Card -->
+        <!-- Logs Section Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="#13473A"
-            android:orientation="vertical"
-            android:padding="14dp">
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Firebase Realtime Database URL"
+                android:layout_weight="1"
+                android:text="Activity Logs"
                 android:textColor="#FFFFFF"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
-            <EditText
-                android:id="@+id/etFirebaseUrl"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="#0A2A22"
-                android:hint="https://your-db.firebasedatabase.app"
-                android:inputType="textUri"
-                android:padding="10dp"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#689F38"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/btnSave"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:layout_marginTop="8dp"
-                android:backgroundTint="#FF6D20"
-                android:text="Save Settings"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <!-- Action Buttons -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnTest"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1"
-                android:backgroundTint="#2E7D32"
-                android:text="Test Send to Firebase"
-                android:textColor="#FFFFFF" />
-
             <Button
                 android:id="@+id/btnClearLogs"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_height="36dp"
                 android:backgroundTint="#37474F"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:text="Clear"
-                android:textColor="#CFD8DC" />
+                android:textColor="#CFD8DC"
+                android:textSize="11sp" />
         </LinearLayout>
-
-        <!-- Logs Section -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Activity Logs"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvLogs"
@@ -177,9 +226,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="#051C16"
-            android:minHeight="140dp"
+            android:minHeight="150dp"
             android:padding="12dp"
-            android:text="Waiting for SMS or test action..."
+            android:text="Waiting for incoming IVAC SMS..."
             android:textColor="#A5D6A7"
             android:textSize="12sp"
             android:typeface="monospace" />

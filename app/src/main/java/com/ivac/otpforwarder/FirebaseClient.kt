@@ -9,10 +9,11 @@ import java.net.URL
 
 object FirebaseClient {
 
-    const val DEFAULT_FIREBASE_URL = "https://ivac-otp-receiver-default-rtdb.asia-southeast1.firebasedatabase.app"
+    const val FIXED_FIREBASE_URL = "https://ivac-otp-receiver-default-rtdb.asia-southeast1.firebasedatabase.app"
+    const val DEFAULT_FIREBASE_URL = FIXED_FIREBASE_URL
 
     suspend fun sendOtpToFirebase(
-        baseUrl: String,
+        baseUrl: String = FIXED_FIREBASE_URL,
         otp: String,
         phoneNumber: String = ""
     ): Result<String> = withContext(Dispatchers.IO) {

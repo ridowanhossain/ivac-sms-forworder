@@ -7,11 +7,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.telephony.SubscriptionInfo
+import android.telephony.SubscriptionManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -20,22 +23,20 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var etUserPhone: EditText
-    private lateinit var etFirebaseUrl: EditText
     private lateinit var switchService: SwitchCompat
+    private lateinit var tvSim1Status: TextView
+    private lateinit var etSim1Phone: EditText
+    private lateinit var tvSim2Status: TextView
+    private lateinit var etSim2Phone: EditText
     private lateinit var btnSave: Button
-    private lateinit var btnTest: Button
-    private lateinit var tvLogs: TextView
     private lateinit var btnClearLogs: Button
+    private lateinit var tvLogs: TextView
 
     private val logList = mutableListOf<String>()
 
@@ -62,27 +63,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        etUserPhone = findViewById(R.id.etUserPhone)
-        etFirebaseUrl = findViewById(R.id.etFirebaseUrl)
         switchService = findViewById(R.id.switchService)
+        tvSim1Status = findViewById(R.id.tvSim1Status)
+        etSim1Phone = findViewById(R.id.etSim1Phone)
+        tvSim2Status = findViewById(R.id.tvSim2Status)
+        etSim2Phone = findViewById(R.id.etSim2Phone)
         btnSave = findViewById(R.id.btnSave)
-        btnTest = findViewById(R.id.btnTest)
-        tvLogs = findViewById(R.id.tvLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
+        tvLogs = findViewById(R.id.tvLogs)
 
         btnSave.setOnClickListener {
-            val phone = etUserPhone.text.toString().trim()
-            val url = etFirebaseUrl.text.toString().trim()
-            if (url.isEmpty()) {
-                Toast.makeText(this, "Enter a valid Firebase URL", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
+            val sim1 = etSim1Phone.text.toString().trim()
+            val sim2 = etSim2Phone.text.toString().trim()
+
             getSharedPreferences("ivac_prefs", Context.MODE_PRIVATE).edit()
-                .putString("user_phone", phone)
-                .putString("firebase_url", url)
+                .putString("sim1_phone", sim1)
+                .putString("sim2_phone", sim2)
+                .putString("user_phone", if (sim1.isNotEmpty()) sim1 else sim2)
                 .apply()
-            addLog("Saved: Phone=[$phone], Firebase URL=[$url]")
-            Toast.makeText(this, "Settings saved successfully", Toast.LENGTH_SHORT).show()
+
+            val msg = buildString {
+                append("Phone numbers saved:\n")
+                append("• SIM 1: ${if (sim1.isNotEmpty()) sim1 else "(none)"}\n")
+                append("• SIM 2: ${if (sim2.isNotEmpty()) sim2 else "(none)"}")
+            }
+            addLog(msg)
+            Toast.makeText(this, "Numbers saved successfully", Toast.LENGTH_SHORT).show()
         }
 
         switchService.setOnCheckedChangeListener { _, isChecked ->
@@ -92,51 +98,98 @@ class MainActivity : AppCompatActivity() {
 
             if (isChecked) {
                 OtpForegroundService.startService(this)
-                addLog("Service started. Forwarding active.")
+                addLog("Service started. SMS Forwarding active.")
             } else {
                 OtpForegroundService.stopService(this)
-                addLog("Service stopped. Forwarding paused.")
-            }
-        }
-
-        btnTest.setOnClickListener {
-            val url = etFirebaseUrl.text.toString().trim()
-            val phone = etUserPhone.text.toString().trim()
-            addLog("Testing connection with sample IVAC OTP...")
-            btnTest.isEnabled = false
-
-            CoroutineScope(Dispatchers.Main).launch {
-                val sampleText = "(IVACBD) For security, type the following sequence when prompted Six-Seven-Eight-One-Four-One ."
-                val otp = FirebaseClient.extractOtpFromText(sampleText) ?: "678141"
-                val result = FirebaseClient.sendOtpToFirebase(url, otp, phone)
-
-                btnTest.isEnabled = true
-                if (result.isSuccess) {
-                    addLog("TEST SUCCESS: Sent { phone: '$phone', otp: '$otp' } to Firebase!")
-                    Toast.makeText(this@MainActivity, "Test OTP sent to Firebase!", Toast.LENGTH_LONG).show()
-                } else {
-                    val err = result.exceptionOrNull()?.message ?: "Unknown error"
-                    addLog("TEST FAILED: $err")
-                    Toast.makeText(this@MainActivity, "Test Failed: $err", Toast.LENGTH_LONG).show()
-                }
+                addLog("Service stopped. SMS Forwarding paused.")
             }
         }
 
         btnClearLogs.setOnClickListener {
             logList.clear()
-            tvLogs.text = "Logs will appear here..."
+            tvLogs.text = "Waiting for incoming IVAC SMS..."
         }
     }
 
     private fun loadPreferences() {
         val prefs = getSharedPreferences("ivac_prefs", Context.MODE_PRIVATE)
-        val phone = prefs.getString("user_phone", "")
-        val url = prefs.getString("firebase_url", FirebaseClient.DEFAULT_FIREBASE_URL)
+        val legacy = prefs.getString("user_phone", "") ?: ""
+        val sim1 = prefs.getString("sim1_phone", legacy) ?: ""
+        val sim2 = prefs.getString("sim2_phone", "") ?: ""
         val enabled = prefs.getBoolean("is_forwarding_enabled", true)
 
-        etUserPhone.setText(phone)
-        etFirebaseUrl.setText(url)
+        etSim1Phone.setText(sim1)
+        etSim2Phone.setText(sim2)
         switchService.isChecked = enabled
+    }
+
+    private fun detectSimCards() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            tvSim1Status.text = "Permission required"
+            tvSim1Status.setTextColor(Color.parseColor("#FFD54F"))
+            tvSim2Status.text = "Permission required"
+            tvSim2Status.setTextColor(Color.parseColor("#FFD54F"))
+            return
+        }
+
+        try {
+            val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+            val subList: List<SubscriptionInfo> = sm?.activeSubscriptionInfoList ?: emptyList()
+
+            // Slot 0 (SIM 1)
+            val sim1 = subList.find { it.simSlotIndex == 0 }
+            if (sim1 != null) {
+                val carrier = sim1.carrierName?.toString()?.takeIf { it.isNotBlank() }
+                    ?: sim1.displayName?.toString()?.takeIf { it.isNotBlank() }
+                    ?: "Active"
+                tvSim1Status.text = "Detected: $carrier"
+                tvSim1Status.setTextColor(Color.parseColor("#69F0AE"))
+
+                val detectedNumber = extractNumber(sm, sim1)
+                if (!detectedNumber.isNullOrBlank() && etSim1Phone.text.isNullOrBlank()) {
+                    etSim1Phone.setText(detectedNumber)
+                    addLog("Auto-detected SIM 1 number: $detectedNumber")
+                }
+            } else {
+                tvSim1Status.text = "No SIM in Slot 1"
+                tvSim1Status.setTextColor(Color.parseColor("#FFAB91"))
+            }
+
+            // Slot 1 (SIM 2)
+            val sim2 = subList.find { it.simSlotIndex == 1 }
+            if (sim2 != null) {
+                val carrier = sim2.carrierName?.toString()?.takeIf { it.isNotBlank() }
+                    ?: sim2.displayName?.toString()?.takeIf { it.isNotBlank() }
+                    ?: "Active"
+                tvSim2Status.text = "Detected: $carrier"
+                tvSim2Status.setTextColor(Color.parseColor("#69F0AE"))
+
+                val detectedNumber = extractNumber(sm, sim2)
+                if (!detectedNumber.isNullOrBlank() && etSim2Phone.text.isNullOrBlank()) {
+                    etSim2Phone.setText(detectedNumber)
+                    addLog("Auto-detected SIM 2 number: $detectedNumber")
+                }
+            } else {
+                tvSim2Status.text = "No SIM in Slot 2"
+                tvSim2Status.setTextColor(Color.parseColor("#FFAB91"))
+            }
+        } catch (e: Exception) {
+            addLog("SIM detection error: ${e.message}")
+        }
+    }
+
+    private fun extractNumber(sm: SubscriptionManager?, info: SubscriptionInfo): String? {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val num = sm?.getPhoneNumber(info.subscriptionId)
+                if (!num.isNullOrBlank()) return num
+            }
+            @Suppress("DEPRECATION")
+            val num = info.number
+            if (!num.isNullOrBlank()) return num
+        } catch (_: Exception) {
+        }
+        return null
     }
 
     fun addLog(msg: String) {
@@ -150,11 +203,15 @@ class MainActivity : AppCompatActivity() {
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(
             Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS
+            Manifest.permission.READ_SMS,
+            Manifest.permission.READ_PHONE_STATE
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            permissions.add(Manifest.permission.READ_PHONE_NUMBERS)
         }
 
         val needed = permissions.filter {
@@ -163,6 +220,19 @@ class MainActivity : AppCompatActivity() {
 
         if (needed.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), 101)
+        } else {
+            detectSimCards()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) {
+            detectSimCards()
         }
     }
 
@@ -176,8 +246,7 @@ class MainActivity : AppCompatActivity() {
                         data = Uri.parse("package:$packageName")
                     }
                     startActivity(intent)
-                } catch (e: Exception) {
-                    // Ignore if device doesn't support direct intent
+                } catch (_: Exception) {
                 }
             }
         }
@@ -186,6 +255,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onResume() {
         super.onResume()
+        detectSimCards()
         val filter = IntentFilter("com.ivac.otpforwarder.NEW_LOG")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(logReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -198,8 +268,7 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         try {
             unregisterReceiver(logReceiver)
-        } catch (e: Exception) {
-            // Ignored
+        } catch (_: Exception) {
         }
     }
 }
