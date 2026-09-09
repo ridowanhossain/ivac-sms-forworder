@@ -3,7 +3,7 @@
 Dedicated Android Application to intercept IVAC OTP SMS and forward it directly to your Firebase Realtime Database.
 
 ## Features
-- **Direct Firebase Sync**: Pre-configured with your Firebase Realtime Database URL (`https://ivac-otp-receiver-default-rtdb.asia-southeast1.firebasedatabase.app`).
+- **Direct Firebase Sync**: Seamlessly syncs with your Firebase Realtime Database (configurable in app settings).
 - **Word-to-Digit Parser**: Automatically decodes IVAC word sequences (e.g. `Six-Seven-Eight-One-Four-One` ➔ `678141`).
 - **24/7 Foreground Service**: Keeps listening for SMS even when screen is locked or app is closed.
 - **Boot Receiver**: Automatically launches on device restart.
