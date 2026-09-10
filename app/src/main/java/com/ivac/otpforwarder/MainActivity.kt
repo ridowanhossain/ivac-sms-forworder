@@ -146,88 +146,92 @@ class MainActivity : AppCompatActivity() {
             val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
 
-            // Slot 0 (SIM 1) Detection
+            val hasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+            val subList = if (hasPermission) {
+                try { sm?.activeSubscriptionInfoList ?: emptyList() } catch (_: Exception) { emptyList() }
+            } else {
+                emptyList()
+            }
+
+            // 1. Resolve SIM 1 (Slot 0)
+            val s1 = subList.find { it.simSlotIndex == 0 } ?: subList.getOrNull(0)
             var sim1Name: String? = null
             var sim1Ready = false
 
-            try {
-                val info0 = sm?.getActiveSubscriptionInfoForSimSlotIndex(0)
-                    ?: sm?.activeSubscriptionInfoList?.find { it.simSlotIndex == 0 }
-                if (info0 != null) {
-                    sim1Ready = true
-                    sim1Name = info0.carrierName?.toString()?.takeIf { it.isNotBlank() }
-                        ?: info0.displayName?.toString()?.takeIf { it.isNotBlank() }
-                }
-            } catch (_: Exception) {}
-
-            val state0 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try { tm.getSimState(0) } catch (_: Exception) { TelephonyManager.SIM_STATE_UNKNOWN }
-            } else {
-                tm.simState
-            }
-
-            if (state0 == TelephonyManager.SIM_STATE_READY) {
+            if (s1 != null) {
                 sim1Ready = true
+                sim1Name = s1.carrierName?.toString()?.takeIf { it.isNotBlank() }
+                    ?: s1.displayName?.toString()?.takeIf { it.isNotBlank() }
                 if (sim1Name.isNullOrBlank()) {
-                    sim1Name = tm.simOperatorName.takeIf { it.isNotBlank() }
+                    try {
+                        val specificTm = tm.createForSubscriptionId(s1.subscriptionId)
+                        sim1Name = specificTm.simOperatorName.takeIf { it.isNotBlank() }
+                            ?: specificTm.networkOperatorName.takeIf { it.isNotBlank() }
+                    } catch (_: Exception) {}
+                }
+            } else {
+                val state0 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try { tm.getSimState(0) } catch (_: Exception) { TelephonyManager.SIM_STATE_UNKNOWN }
+                } else {
+                    tm.simState
+                }
+                if (state0 == TelephonyManager.SIM_STATE_READY) {
+                    sim1Ready = true
                 }
             }
 
-            if (sim1Ready) {
-                tvSim1Status.text = "✓ ${sim1Name ?: "Active"}"
-                tvSim1Status.setTextColor(Color.parseColor("#69F0AE"))
-            } else if (state0 == TelephonyManager.SIM_STATE_ABSENT) {
-                tvSim1Status.text = "Slot 1 Empty"
-                tvSim1Status.setTextColor(Color.parseColor("#FFAB91"))
-            } else {
-                // Fallback for devices restricting low-level state query
-                tvSim1Status.text = "✓ Active"
-                tvSim1Status.setTextColor(Color.parseColor("#69F0AE"))
-            }
-
-            // Slot 1 (SIM 2) Detection
+            // 2. Resolve SIM 2 (Slot 1)
+            val s2 = subList.find { it.simSlotIndex == 1 } ?: (if (subList.size > 1 && subList[1] != s1) subList[1] else null)
             var sim2Name: String? = null
             var sim2Ready = false
 
-            try {
-                val info1 = sm?.getActiveSubscriptionInfoForSimSlotIndex(1)
-                    ?: sm?.activeSubscriptionInfoList?.find { it.simSlotIndex == 1 }
-                if (info1 != null) {
-                    sim2Ready = true
-                    sim2Name = info1.carrierName?.toString()?.takeIf { it.isNotBlank() }
-                        ?: info1.displayName?.toString()?.takeIf { it.isNotBlank() }
-                }
-            } catch (_: Exception) {}
-
-            val state1 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try { tm.getSimState(1) } catch (_: Exception) { TelephonyManager.SIM_STATE_UNKNOWN }
-            } else {
-                TelephonyManager.SIM_STATE_UNKNOWN
-            }
-
-            if (state1 == TelephonyManager.SIM_STATE_READY) {
+            if (s2 != null) {
                 sim2Ready = true
+                sim2Name = s2.carrierName?.toString()?.takeIf { it.isNotBlank() }
+                    ?: s2.displayName?.toString()?.takeIf { it.isNotBlank() }
                 if (sim2Name.isNullOrBlank()) {
-                    sim2Name = tm.simOperatorName.takeIf { it.isNotBlank() }
+                    try {
+                        val specificTm = tm.createForSubscriptionId(s2.subscriptionId)
+                        sim2Name = specificTm.simOperatorName.takeIf { it.isNotBlank() }
+                            ?: specificTm.networkOperatorName.takeIf { it.isNotBlank() }
+                    } catch (_: Exception) {}
+                }
+            } else {
+                val state1 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try { tm.getSimState(1) } catch (_: Exception) { TelephonyManager.SIM_STATE_UNKNOWN }
+                } else {
+                    TelephonyManager.SIM_STATE_UNKNOWN
+                }
+                if (state1 == TelephonyManager.SIM_STATE_READY) {
+                    sim2Ready = true
                 }
             }
 
+            // Update UI for SIM 1
+            if (sim1Ready) {
+                tvSim1Status.text = "✓ ${sim1Name ?: "SIM 1 (Active)"}"
+                tvSim1Status.setTextColor(Color.parseColor("#69F0AE"))
+            } else {
+                tvSim1Status.text = "Slot 1 Empty"
+                tvSim1Status.setTextColor(Color.parseColor("#FFAB91"))
+            }
+
+            // Update UI for SIM 2
             if (sim2Ready) {
-                tvSim2Status.text = "✓ ${sim2Name ?: "Active"}"
+                tvSim2Status.text = "✓ ${sim2Name ?: "SIM 2 (Active)"}"
                 tvSim2Status.setTextColor(Color.parseColor("#69F0AE"))
-            } else if (state1 == TelephonyManager.SIM_STATE_ABSENT) {
+            } else {
                 tvSim2Status.text = "Slot 2 Empty"
                 tvSim2Status.setTextColor(Color.parseColor("#FFAB91"))
-            } else {
-                tvSim2Status.text = "✓ Active"
-                tvSim2Status.setTextColor(Color.parseColor("#69F0AE"))
             }
 
+            if (subList.isNotEmpty()) {
+                val summary = subList.joinToString(", ") { "Slot ${it.simSlotIndex}: ${it.carrierName ?: it.displayName}" }
+                addLog("Detected: $summary")
+            }
         } catch (e: Exception) {
-            tvSim1Status.text = "✓ Active"
-            tvSim1Status.setTextColor(Color.parseColor("#69F0AE"))
-            tvSim2Status.text = "✓ Active"
-            tvSim2Status.setTextColor(Color.parseColor("#69F0AE"))
+            tvSim1Status.text = "✓ SIM 1 (Active)"
+            tvSim2Status.text = "✓ SIM 2 (Active)"
         }
     }
 
