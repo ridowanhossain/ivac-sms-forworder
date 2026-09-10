@@ -71,13 +71,14 @@ class SmsReceiver : BroadcastReceiver() {
         when (detectedSlot) {
             0 -> {
                 simLabel = "SIM 1"
-                targetPhone = if (sim1Phone.isNotEmpty()) sim1Phone else legacyPhone
+                targetPhone = sim1Phone.ifEmpty { legacyPhone.ifEmpty { sim2Phone } }
             }
             1 -> {
                 simLabel = "SIM 2"
-                targetPhone = if (sim2Phone.isNotEmpty()) sim2Phone else (if (sim1Phone.isNotEmpty()) sim1Phone else legacyPhone)
+                targetPhone = sim2Phone.ifEmpty { legacyPhone.ifEmpty { sim1Phone } }
             }
             else -> {
+                // If slot could not be determined automatically from intent extras:
                 if (sim1Phone.isNotEmpty() && sim2Phone.isEmpty()) {
                     simLabel = "SIM 1"
                     targetPhone = sim1Phone
@@ -85,11 +86,11 @@ class SmsReceiver : BroadcastReceiver() {
                     simLabel = "SIM 2"
                     targetPhone = sim2Phone
                 } else if (sim1Phone.isNotEmpty()) {
-                    simLabel = "SIM (Auto)"
+                    simLabel = "SIM 1 (Default)"
                     targetPhone = sim1Phone
                 } else {
                     simLabel = "SIM"
-                    targetPhone = legacyPhone
+                    targetPhone = legacyPhone.ifEmpty { sim2Phone }
                 }
             }
         }
@@ -122,30 +123,43 @@ class SmsReceiver : BroadcastReceiver() {
     private fun detectSimSlot(context: Context, intent: Intent): Int {
         val bundle: Bundle = intent.extras ?: return -1
 
-        // 1. Direct slot keys common across various Android OEMs
-        val slotKeys = arrayOf("slot", "slot_id", "simSlot", "sim_slot", "slotIndex", "android.telephony.extra.SLOT_INDEX", "phone", "simId")
+        // 1. Direct slot keys common across various Android OEMs (Xiaomi, Samsung, Oppo, Vivo, etc.)
+        val slotKeys = arrayOf(
+            "slot", "slot_id", "simSlot", "sim_slot", "slotIndex",
+            "android.telephony.extra.SLOT_INDEX", "phone", "simId", "sim_id", "simnum"
+        )
         for (key in slotKeys) {
-            if (bundle.containsKey(key)) {
-                val slot = bundle.getInt(key, -1)
-                if (slot in 0..1) return slot
+            val v = bundle.get(key) ?: continue
+            val slot = when (v) {
+                is Int -> v
+                is Long -> v.toInt()
+                is String -> v.toIntOrNull() ?: -1
+                is Byte -> v.toInt()
+                is Short -> v.toInt()
+                else -> -1
             }
+            if (slot in 0..1) return slot
         }
 
         // 2. Subscription ID extras
         val subKeys = arrayOf("subscription", "sub_id", "subscription_id", "android.telephony.extra.SUBSCRIPTION_INDEX")
         for (key in subKeys) {
-            if (bundle.containsKey(key)) {
-                val subId = bundle.getInt(key, -1)
-                if (subId != -1) {
-                    try {
-                        val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-                        val info = sm?.getActiveSubscriptionInfo(subId)
-                        if (info != null && info.simSlotIndex in 0..1) {
-                            return info.simSlotIndex
-                        }
-                    } catch (e: Exception) {
-                        Log.w("SmsReceiver", "Could not query SubscriptionManager: ${e.message}")
+            val v = bundle.get(key) ?: continue
+            val subId = when (v) {
+                is Int -> v
+                is Long -> v.toInt()
+                is String -> v.toIntOrNull() ?: -1
+                else -> -1
+            }
+            if (subId != -1) {
+                try {
+                    val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+                    val info = sm?.getActiveSubscriptionInfo(subId)
+                    if (info != null && info.simSlotIndex in 0..1) {
+                        return info.simSlotIndex
                     }
+                } catch (e: Exception) {
+                    Log.w("SmsReceiver", "Could not query SubscriptionManager: ${e.message}")
                 }
             }
         }
