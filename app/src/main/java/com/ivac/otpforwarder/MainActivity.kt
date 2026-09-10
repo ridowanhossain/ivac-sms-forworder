@@ -169,6 +169,14 @@ class MainActivity : AppCompatActivity() {
                             ?: specificTm.networkOperatorName.takeIf { it.isNotBlank() }
                     } catch (_: Exception) {}
                 }
+                val autoPhone1 = extractPhoneNumber(sm, s1)
+                if (!autoPhone1.isNullOrBlank() && etSim1Phone.text.isNullOrBlank()) {
+                    etSim1Phone.setText(autoPhone1)
+                    addLog("Auto-detected SIM 1 number: $autoPhone1")
+                    getSharedPreferences("ivac_prefs", Context.MODE_PRIVATE).edit()
+                        .putString("sim1_phone", autoPhone1)
+                        .commit()
+                }
             } else {
                 val state0 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     try { tm.getSimState(0) } catch (_: Exception) { TelephonyManager.SIM_STATE_UNKNOWN }
@@ -195,6 +203,15 @@ class MainActivity : AppCompatActivity() {
                         sim2Name = specificTm.simOperatorName.takeIf { it.isNotBlank() }
                             ?: specificTm.networkOperatorName.takeIf { it.isNotBlank() }
                     } catch (_: Exception) {}
+                }
+
+                val autoPhone2 = extractPhoneNumber(sm, s2)
+                if (!autoPhone2.isNullOrBlank() && etSim2Phone.text.isNullOrBlank()) {
+                    etSim2Phone.setText(autoPhone2)
+                    addLog("Auto-detected SIM 2 number: $autoPhone2")
+                    getSharedPreferences("ivac_prefs", Context.MODE_PRIVATE).edit()
+                        .putString("sim2_phone", autoPhone2)
+                        .commit()
                 }
             } else {
                 val state1 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -233,6 +250,32 @@ class MainActivity : AppCompatActivity() {
             tvSim1Status.text = "✓ SIM 1 (Active)"
             tvSim2Status.text = "✓ SIM 2 (Active)"
         }
+    }
+
+    private fun extractPhoneNumber(sm: SubscriptionManager?, info: SubscriptionInfo): String? {
+        var raw: String? = null
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                raw = sm?.getPhoneNumber(info.subscriptionId)
+            }
+        } catch (_: Exception) {}
+
+        if (raw.isNullOrBlank()) {
+            try {
+                @Suppress("DEPRECATION")
+                raw = info.number
+            } catch (_: Exception) {}
+        }
+
+        if (raw.isNullOrBlank()) return null
+
+        var clean = raw.trim().replace(" ", "").replace("-", "")
+        if (clean.startsWith("+880")) {
+            clean = clean.removePrefix("+88")
+        } else if (clean.startsWith("880")) {
+            clean = clean.removePrefix("88")
+        }
+        return clean.takeIf { it.length in 10..14 }
     }
 
     fun addLog(msg: String) {
